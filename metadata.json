@@ -1,0 +1,6 @@
+{
+  "name": "Super Mario Parkour - Year 2 British Curriculum",
+  "description": "An interactive British National Curriculum Year 2 learning game with dynamic Mario parkour, animated obstacle vaults, interactive visuals, and speech audio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Fredoka', 'Cairo', 'Nunito', system-ui, -apple-system, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+}
+
+/* Custom 3D button press styling (Duolingo / Mario style) */
+.btn-mario-green {
+  background: linear-gradient(180deg, #58cc02 0%, #46a302 100%);
+  box-shadow: 0 5px 0 #327502, 0 8px 16px rgba(88, 204, 2, 0.35);
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.btn-mario-green:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #327502, 0 3px 8px rgba(88, 204, 2, 0.3);
+}
+
+.btn-mario-red {
+  background: linear-gradient(180deg, #ff4b4b 0%, #ea2b2b 100%);
+  box-shadow: 0 5px 0 #b31b1b, 0 8px 16px rgba(255, 75, 75, 0.35);
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.btn-mario-red:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #b31b1b, 0 3px 8px rgba(255, 75, 75, 0.3);
+}
+
+.btn-mario-blue {
+  background: linear-gradient(180deg, #1cb0f6 0%, #0895d9 100%);
+  box-shadow: 0 5px 0 #056fa3, 0 8px 16px rgba(28, 176, 246, 0.35);
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.btn-mario-blue:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #056fa3, 0 3px 8px rgba(28, 176, 246, 0.3);
+}
+
+.btn-mario-yellow {
+  background: linear-gradient(180deg, #ffc800 0%, #ff9600 100%);
+  box-shadow: 0 5px 0 #c27000, 0 8px 16px rgba(255, 200, 0, 0.35);
+  color: #3e2723;
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.btn-mario-yellow:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #c27000, 0 3px 8px rgba(255, 200, 0, 0.3);
+}
+
+.btn-mario-purple {
+  background: linear-gradient(180deg, #9b51e0 0%, #7b2cbf 100%);
+  box-shadow: 0 5px 0 #571694, 0 8px 16px rgba(155, 81, 224, 0.35);
+  transition: all 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.btn-mario-purple:active {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 #571694, 0 3px 8px rgba(155, 81, 224, 0.3);
+}
+
+/* Question Option Cards */
+.card-option {
+  background: #ffffff;
+  border: 3px solid #e5e7eb;
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 0 #d1d5db;
+  transition: all 0.15s ease-out;
+}
+.card-option:hover {
+  border-color: #38bdf8;
+  background-color: #f0f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #38bdf8, 0 10px 20px rgba(56, 189, 248, 0.2);
+}
+.card-option:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #38bdf8;
+}
+.card-option.correct {
+  background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%) !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 4px 0 #059669 !important;
+  animation: bounce-happy 0.5s ease-in-out;
+}
+.card-option.wrong {
+  background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%) !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 4px 0 #b91c1c !important;
+  animation: shake-nope 0.4s ease-in-out;
+}
+
+@keyframes bounce-happy {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-8px) scale(1.03); }
+}
+
+@keyframes shake-nope {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-float {
+  animation: float-slow 3s ease-in-out infinite;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
