@@ -209,6 +209,110 @@ class SoundManager {
     this.tone(850, 0.08, 'sine', 0.25);
   }
 
+  // Goomba / Enemy Stomp
+  public playStomp() {
+    this.tone(160, 0.12, 'triangle', 0.4);
+    setTimeout(() => this.tone(90, 0.18, 'sine', 0.35), 40);
+  }
+
+  // Springboard Boing
+  public playSpring() {
+    this.init();
+    if (!this.soundEnabled || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    try {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(260, now);
+      osc.frequency.exponentialRampToValueAtTime(780, now + 0.25);
+
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    } catch (e) {}
+  }
+
+  // Hitting [?] Question Block from underneath
+  public playBlockHit() {
+    this.tone(280, 0.08, 'square', 0.25);
+    setTimeout(() => this.playCoin(), 70);
+  }
+
+  // Dash Whoosh
+  public playDash() {
+    this.tone(440, 0.14, 'triangle', 0.2, 50);
+  }
+
+  // Streak Combo Fanfare (2x, 3x, 5x)
+  public playComboFanfare(streak: number) {
+    const base = 440 + Math.min(streak * 60, 500);
+    this.tone(base, 0.12, 'sine', 0.35);
+    setTimeout(() => this.tone(base * 1.25, 0.15, 'sine', 0.4), 80);
+    setTimeout(() => this.tone(base * 1.5, 0.25, 'triangle', 0.45), 160);
+  }
+
+  // Retro 8-bit Background Music Synthesizer
+  private bgmInterval: any = null;
+  private bgmPlaying: boolean = false;
+
+  public isBgmPlaying(): boolean {
+    return this.bgmPlaying;
+  }
+
+  public toggleBgm(): boolean {
+    if (this.bgmPlaying) {
+      this.stopBgm();
+      return false;
+    } else {
+      this.startBgm();
+      return true;
+    }
+  }
+
+  public startBgm() {
+    if (!this.soundEnabled || this.bgmPlaying) return;
+    this.init();
+    if (!this.ctx) return;
+    this.bgmPlaying = true;
+
+    // Classic cheerful Overworld 8-bit pattern
+    const melody = [
+      { f: 659.25, d: 0.12 }, // E5
+      { f: 659.25, d: 0.12 }, // E5
+      { f: 0, d: 0.12 },      // rest
+      { f: 659.25, d: 0.12 }, // E5
+      { f: 0, d: 0.12 },      // rest
+      { f: 523.25, d: 0.12 }, // C5
+      { f: 659.25, d: 0.18 }, // E5
+      { f: 783.99, d: 0.28 }, // G5
+      { f: 0, d: 0.2 },       // rest
+      { f: 392.00, d: 0.3 }   // G4
+    ];
+
+    let noteIdx = 0;
+    this.bgmInterval = setInterval(() => {
+      if (!this.bgmPlaying || !this.soundEnabled) return;
+      const note = melody[noteIdx];
+      if (note.f > 0) {
+        this.tone(note.f, note.d, 'square', 0.08);
+      }
+      noteIdx = (noteIdx + 1) % melody.length;
+    }, 280);
+  }
+
+  public stopBgm() {
+    this.bgmPlaying = false;
+    if (this.bgmInterval) {
+      clearInterval(this.bgmInterval);
+      this.bgmInterval = null;
+    }
+  }
+
   // Text-To-Speech with English (British) preference
   public speak(text: string, lang: 'en' | 'ar' = 'en', rate: number = 0.95, onEnd?: () => void) {
     if (!this.voiceEnabled) return;

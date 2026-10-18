@@ -15,6 +15,7 @@ interface GameHUDProps {
   onOpenMap: () => void;
   onOpenGarage: () => void;
   onOpenSubjects: () => void;
+  onOpenTrophyRoom: () => void;
   onToggleSound: () => void;
   onToggleVoice: () => void;
   onToggleLanguage: () => void;
@@ -30,6 +31,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onOpenMap,
   onOpenGarage,
   onOpenSubjects,
+  onOpenTrophyRoom,
   onToggleSound,
   onToggleVoice,
   onToggleLanguage
@@ -115,6 +117,28 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             title="Open World Map"
           >
             <Map className="w-4 h-4" />
+          </button>
+
+          {/* Trophy Room Button */}
+          <button
+            type="button"
+            onClick={onOpenTrophyRoom}
+            className="w-8 h-8 rounded-xl bg-amber-400 hover:bg-amber-500 text-amber-950 flex items-center justify-center text-sm shadow-sm transition-all active:scale-90"
+            title="Open Trophy Room & Achievements"
+          >
+            🏆
+          </button>
+
+          {/* Music BGM Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              soundManager.toggleBgm();
+            }}
+            className="w-8 h-8 rounded-xl bg-pink-100 hover:bg-pink-200 text-pink-700 flex items-center justify-center text-sm shadow-sm transition-all active:scale-90"
+            title="Toggle 8-bit Mario Music"
+          >
+            🎵
           </button>
 
           {/* Sound Toggle */}

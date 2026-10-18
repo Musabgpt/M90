@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { CharacterId } from '../types/game';
+import { CharacterId, SubjectCode } from '../types/game';
 import { CHARACTERS, VEHICLES } from '../data/characters';
 import { soundManager } from '../utils/audio';
 
@@ -21,8 +21,12 @@ export interface Barrier {
 interface MarioCanvasProps {
   characterId: CharacterId;
   vehicleId: string;
+  subjectCode: SubjectCode;
+  streak: number;
   barriers: Barrier[];
   onEncounterBarrier: (barrier: Barrier) => void;
+  onCollectCoin: () => void;
+  onStompCritter: () => void;
   isPaused: boolean;
   activeJumpTriggerRef: React.MutableRefObject<(() => void) | null>;
 }
@@ -30,8 +34,12 @@ interface MarioCanvasProps {
 export const MarioCanvas: React.FC<MarioCanvasProps> = ({
   characterId,
   vehicleId,
+  subjectCode,
+  streak,
   barriers,
   onEncounterBarrier,
+  onCollectCoin,
+  onStompCritter,
   isPaused,
   activeJumpTriggerRef
 }) => {
@@ -56,7 +64,8 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       isSuperVaulting: false,
       superVaultTargetX: 0,
       vaultProgress: 0,
-      rotation: 0
+      rotation: 0,
+      boostTimer: 0
     },
     camera: { x: 0, y: 0, zoom: 1 },
     keys: { left: false, right: false, jump: false },
@@ -72,6 +81,12 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
     }>,
     clouds: [] as Array<{ x: number; y: number; speed: number; w: number; h: number }>,
     hills: [] as Array<{ x: number; y: number; r: number; color: string }>,
+    floatingCoins: [] as Array<{ id: string; x: number; y: number; collected: boolean; floatOffset: number }>,
+    hitBlocks: [] as Array<{ id: string; x: number; y: number; w: number; h: number; hit: boolean; bumpTimer: number }>,
+    springboards: [] as Array<{ x: number; y: number; compressed: number }>,
+    critters: [] as Array<{ id: string; x: number; y: number; w: number; h: number; vx: number; squished: boolean; squishTimer: number }>,
+    boostPads: [] as Array<{ x: number; y: number }>,
+    floatingTexts: [] as Array<{ x: number; y: number; text: string; color: string; alpha: number }>,
     groundY: 0,
     currentEncounteredBarrierId: null as string | null
   });
@@ -85,32 +100,120 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       const p = stateRef.current.player;
       p.isSuperVaulting = true;
       p.vaultProgress = 0;
-      p.vy = -19 * vehicle.jumpMultiplier;
-      p.vx = 7.5 * vehicle.speedMultiplier;
+      p.vy = -19.5 * vehicle.jumpMultiplier;
+      p.vx = 8.0 * vehicle.speedMultiplier;
       p.facing = 1;
       p.onGround = false;
 
       soundManager.playSuperVault();
 
       // Spawn burst particles
-      for (let i = 0; i < 20; i++) {
+      for (let i = 0; i < 28; i++) {
         stateRef.current.particles.push({
           x: p.x + p.w / 2,
           y: p.y + p.h,
-          vx: (Math.random() - 0.5) * 8,
-          vy: -Math.random() * 8,
-          color: Math.random() > 0.5 ? '#FFD700' : '#FF4500',
-          size: 4 + Math.random() * 5,
+          vx: (Math.random() - 0.5) * 10,
+          vy: -Math.random() * 10,
+          color: ['#FFD700', '#FF4500', '#00E5FF', '#76FF03'][Math.floor(Math.random() * 4)],
+          size: 4 + Math.random() * 6,
           alpha: 1,
-          life: 30 + Math.random() * 20
+          life: 35 + Math.random() * 20
         });
+      }
+
+      // Add floating combo text
+      if (streak >= 2) {
+        stateRef.current.floatingTexts.push({
+          x: p.x + 30,
+          y: p.y - 20,
+          text: `🔥 ${streak}x STREAK!`,
+          color: '#F59E0B',
+          alpha: 1
+        });
+        soundManager.playComboFanfare(streak);
       }
     };
 
     return () => {
       activeJumpTriggerRef.current = null;
     };
-  }, [vehicle]);
+  }, [vehicle, streak]);
+
+  // Generate interactive in-world elements between barriers
+  useEffect(() => {
+    const coins: Array<{ id: string; x: number; y: number; collected: boolean; floatOffset: number }> = [];
+    const hitBlocks: Array<{ id: string; x: number; y: number; w: number; h: number; hit: boolean; bumpTimer: number }> = [];
+    const springboards: Array<{ x: number; y: number; compressed: number }> = [];
+    const critters: Array<{ id: string; x: number; y: number; w: number; h: number; vx: number; squished: boolean; squishTimer: number }> = [];
+    const boostPads: Array<{ x: number; y: number }> = [];
+
+    // Between each pair of barriers, create interactive playgrounds
+    barriers.forEach((b, idx) => {
+      const startX = idx === 0 ? 180 : barriers[idx - 1].x + barriers[idx - 1].w + 50;
+      const endX = b.x - 70;
+      const gap = endX - startX;
+
+      if (gap > 200) {
+        // Floating coin arc in the middle
+        const midX = startX + gap * 0.45;
+        for (let c = 0; c < 3; c++) {
+          coins.push({
+            id: `coin-${idx}-${c}`,
+            x: midX + c * 32,
+            y: 0, // calculated from groundY in loop
+            collected: false,
+            floatOffset: c * 0.4
+          });
+        }
+
+        // Bumping Question Block [?]
+        hitBlocks.push({
+          id: `block-${idx}`,
+          x: startX + gap * 0.25,
+          y: 0,
+          w: 36,
+          h: 36,
+          hit: false,
+          bumpTimer: 0
+        });
+
+        // Springboard Trampoline
+        if (idx % 2 === 0) {
+          springboards.push({
+            x: startX + gap * 0.72,
+            y: 0,
+            compressed: 0
+          });
+        }
+
+        // Walking cute Goomba Critter
+        critters.push({
+          id: `critter-${idx}`,
+          x: startX + gap * 0.55,
+          y: 0,
+          w: 32,
+          h: 30,
+          vx: -1.2,
+          squished: false,
+          squishTimer: 0
+        });
+
+        // Speed Boost Pad
+        if (idx % 3 === 1) {
+          boostPads.push({
+            x: startX + 60,
+            y: 0
+          });
+        }
+      }
+    });
+
+    stateRef.current.floatingCoins = coins;
+    stateRef.current.hitBlocks = hitBlocks;
+    stateRef.current.springboards = springboards;
+    stateRef.current.critters = critters;
+    stateRef.current.boostPads = boostPads;
+  }, [barriers]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -203,8 +306,10 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       const p = stateRef.current.player;
       const keys = stateRef.current.keys;
 
-      // Update speed based on vehicle
-      p.speed = p.baseSpeed * vehicle.speedMultiplier;
+      // Update speed based on vehicle & boost
+      const boostMultiplier = p.boostTimer > 0 ? 1.6 : 1.0;
+      if (p.boostTimer > 0) p.boostTimer--;
+      p.speed = p.baseSpeed * vehicle.speedMultiplier * boostMultiplier;
 
       // Physics update if not paused or if super vaulting
       if (!isPaused || p.isSuperVaulting) {
@@ -216,16 +321,16 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
           p.rotation += 0.22; // Somersault spin!
 
           // Sparkle trail
-          if (Math.random() > 0.4) {
+          if (Math.random() > 0.3) {
             stateRef.current.particles.push({
               x: p.x + p.w / 2,
               y: p.y + p.h / 2,
-              vx: (Math.random() - 0.5) * 2,
-              vy: (Math.random() - 0.5) * 2,
+              vx: (Math.random() - 0.5) * 3,
+              vy: (Math.random() - 0.5) * 3,
               color: '#FFD700',
               size: 4 + Math.random() * 4,
               alpha: 1,
-              life: 20
+              life: 22
             });
           }
 
@@ -239,16 +344,16 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
             p.rotation = 0;
 
             // Landing dust
-            for (let i = 0; i < 8; i++) {
+            for (let i = 0; i < 10; i++) {
               stateRef.current.particles.push({
                 x: p.x + p.w / 2,
                 y: groundY,
-                vx: (Math.random() - 0.5) * 4,
-                vy: -Math.random() * 2,
+                vx: (Math.random() - 0.5) * 5,
+                vy: -Math.random() * 3,
                 color: '#d4d4d8',
-                size: 3 + Math.random() * 3,
+                size: 3 + Math.random() * 4,
                 alpha: 0.8,
-                life: 15
+                life: 18
               });
             }
           }
@@ -287,8 +392,146 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
             p.animFrame = 0;
           }
 
-          // Barrier Collisions
-          // Crucial fix: The barrier is a HIGH pillar (cannot be jumped over normally).
+          // ------------------------------------
+          // INTERACTIVE IN-WORLD COLLISIONS
+          // ------------------------------------
+
+          // 1. Floating Coins pickup
+          stateRef.current.floatingCoins.forEach(coin => {
+            if (coin.collected) return;
+            const coinY = groundY - 80 - Math.sin(Date.now() / 250 + coin.floatOffset) * 8;
+            const dist = Math.hypot(p.x + p.w / 2 - coin.x, p.y + p.h / 2 - coinY);
+            if (dist < 32) {
+              coin.collected = true;
+              soundManager.playCoin();
+              onCollectCoin();
+
+              // Sparkles
+              for (let i = 0; i < 6; i++) {
+                stateRef.current.particles.push({
+                  x: coin.x,
+                  y: coinY,
+                  vx: (Math.random() - 0.5) * 4,
+                  vy: (Math.random() - 0.5) * 4,
+                  color: '#FACC15',
+                  size: 3,
+                  alpha: 1,
+                  life: 15
+                });
+              }
+            }
+          });
+
+          // 2. Hitting [?] Question Block from underneath with head
+          stateRef.current.hitBlocks.forEach(blk => {
+            const blockY = groundY - 110;
+            if (
+              !blk.hit &&
+              p.vy < 0 &&
+              p.x + p.w > blk.x &&
+              p.x < blk.x + blk.w &&
+              p.y <= blockY + blk.h &&
+              p.y >= blockY
+            ) {
+              blk.hit = true;
+              blk.bumpTimer = 10;
+              p.vy = 2; // bounce down
+              soundManager.playBlockHit();
+              onCollectCoin();
+
+              stateRef.current.floatingTexts.push({
+                x: blk.x + blk.w / 2,
+                y: blockY - 10,
+                text: '+1 🪙',
+                color: '#F59E0B',
+                alpha: 1
+              });
+            }
+            if (blk.bumpTimer > 0) blk.bumpTimer--;
+          });
+
+          // 3. Stepping on Springboards (Super Boing!)
+          stateRef.current.springboards.forEach(sp => {
+            const springY = groundY - 14;
+            if (
+              p.x + p.w > sp.x &&
+              p.x < sp.x + 38 &&
+              p.y + p.h >= springY &&
+              p.y + p.h <= groundY + 5 &&
+              p.vy >= 0
+            ) {
+              sp.compressed = 8;
+              p.vy = -22; // High spring launch!
+              p.onGround = false;
+              soundManager.playSpring();
+
+              stateRef.current.floatingTexts.push({
+                x: sp.x + 19,
+                y: springY - 20,
+                text: 'BOING! 🚀',
+                color: '#10B981',
+                alpha: 1
+              });
+            }
+            if (sp.compressed > 0) sp.compressed--;
+          });
+
+          // 4. Stomping or interacting with Critters (Goombas)
+          stateRef.current.critters.forEach(cr => {
+            if (cr.squished) {
+              cr.squishTimer++;
+              return;
+            }
+            // Move critter
+            cr.x += cr.vx;
+            // Reverse direction if walking too far
+            const crY = groundY - cr.h;
+
+            // Stomp collision from above
+            if (
+              p.x + p.w > cr.x &&
+              p.x < cr.x + cr.w &&
+              p.y + p.h >= crY &&
+              p.y + p.h <= crY + 16 &&
+              p.vy > 0
+            ) {
+              cr.squished = true;
+              p.vy = -12; // bounce off critter
+              soundManager.playStomp();
+              onStompCritter();
+
+              stateRef.current.floatingTexts.push({
+                x: cr.x + cr.w / 2,
+                y: crY - 12,
+                text: '+10 XP! ⭐',
+                color: '#10B981',
+                alpha: 1
+              });
+            }
+          });
+
+          // 5. Speed Boost Pads
+          stateRef.current.boostPads.forEach(bp => {
+            if (
+              p.x + p.w > bp.x &&
+              p.x < bp.x + 50 &&
+              p.y + p.h >= groundY - 6 &&
+              p.boostTimer === 0
+            ) {
+              p.boostTimer = 45; // boost speed
+              soundManager.playDash();
+
+              stateRef.current.floatingTexts.push({
+                x: bp.x + 25,
+                y: groundY - 30,
+                text: 'TURBO BOOST! ⚡',
+                color: '#06B6D4',
+                alpha: 1
+              });
+            }
+          });
+
+          // 6. Barrier Collisions
           barriers.forEach(b => {
             if (b.cleared) return;
 
@@ -336,6 +579,13 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       });
       stateRef.current.particles = stateRef.current.particles.filter(pt => pt.alpha > 0);
 
+      // Update floating texts
+      stateRef.current.floatingTexts.forEach(ft => {
+        ft.y -= 1.2;
+        ft.alpha -= 0.02;
+      });
+      stateRef.current.floatingTexts = stateRef.current.floatingTexts.filter(ft => ft.alpha > 0);
+
       // Update clouds
       stateRef.current.clouds.forEach(c => {
         c.x -= c.speed;
@@ -349,11 +599,39 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       // ------------------------------------
       ctx.clearRect(0, 0, w, h);
 
-      // 1. Sky Gradient
+      // 1. Sky Gradient based on Subject
       const skyGrad = ctx.createLinearGradient(0, 0, 0, groundY);
-      skyGrad.addColorStop(0, '#38bdf8');
-      skyGrad.addColorStop(0.6, '#7dd3fc');
-      skyGrad.addColorStop(1, '#bae6fd');
+      if (subjectCode === 'ENG') {
+        // Sunset orange/gold
+        skyGrad.addColorStop(0, '#f97316');
+        skyGrad.addColorStop(0.5, '#fb923c');
+        skyGrad.addColorStop(1, '#fed7aa');
+      } else if (subjectCode === 'SCI') {
+        // Emerald aurora
+        skyGrad.addColorStop(0, '#065f46');
+        skyGrad.addColorStop(0.6, '#10b981');
+        skyGrad.addColorStop(1, '#a7f3d0');
+      } else if (subjectCode === 'HIS') {
+        // Castle dusk
+        skyGrad.addColorStop(0, '#581c87');
+        skyGrad.addColorStop(0.6, '#7e22ce');
+        skyGrad.addColorStop(1, '#e9d5ff');
+      } else if (subjectCode === 'GEO') {
+        // Tropical turquoise
+        skyGrad.addColorStop(0, '#0891b2');
+        skyGrad.addColorStop(0.6, '#06b6d4');
+        skyGrad.addColorStop(1, '#cffafe');
+      } else if (subjectCode === 'ART') {
+        // Cosmic rainbow
+        skyGrad.addColorStop(0, '#db2777');
+        skyGrad.addColorStop(0.6, '#f43f5e');
+        skyGrad.addColorStop(1, '#fbcfe8');
+      } else {
+        // Classic Mario blue
+        skyGrad.addColorStop(0, '#38bdf8');
+        skyGrad.addColorStop(0.6, '#7dd3fc');
+        skyGrad.addColorStop(1, '#bae6fd');
+      }
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, w, h);
 
@@ -380,15 +658,10 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       });
 
       // 4. Ground (Mario Grass & Soil Bricks)
-      // Grass strip
       ctx.fillStyle = '#48bb78';
       ctx.fillRect(0, groundY, w, 22);
-
-      // Grass top highlight
       ctx.fillStyle = '#68d391';
       ctx.fillRect(0, groundY, w, 5);
-
-      // Soil layer with block seams
       ctx.fillStyle = '#9c4221';
       ctx.fillRect(0, groundY + 22, w, h - (groundY + 22));
 
@@ -410,20 +683,111 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
         ctx.stroke();
       }
 
-      // 5. Draw Obstacle Pillars / Pipes & Question Blocks
+      // 5. Draw Interactive In-World Objects
+
+      // A. Speed Boost Pads
+      stateRef.current.boostPads.forEach(bp => {
+        const bx = bp.x - camX;
+        if (bx < -80 || bx > w + 80) return;
+        ctx.fillStyle = '#06B6D4';
+        ctx.fillRect(bx, groundY - 4, 50, 6);
+        ctx.fillStyle = '#FACC15';
+        ctx.font = '900 12px Fredoka, sans-serif';
+        ctx.fillText('>>>', bx + 25, groundY - 6);
+      });
+
+      // B. Springboard Trampolines
+      stateRef.current.springboards.forEach(sp => {
+        const sx = sp.x - camX;
+        if (sx < -60 || sx > w + 60) return;
+        const comp = sp.compressed > 0 ? 6 : 0;
+        ctx.fillStyle = '#DC2626';
+        ctx.fillRect(sx, groundY - 14 + comp, 38, 14 - comp);
+        ctx.fillStyle = '#FACC15';
+        ctx.fillRect(sx + 4, groundY - 16 + comp, 30, 4);
+      });
+
+      // C. Bumping Question Blocks [?] in the path
+      stateRef.current.hitBlocks.forEach(blk => {
+        const bx = blk.x - camX;
+        const bumpY = blk.bumpTimer > 0 ? -8 : 0;
+        const by = groundY - 110 + bumpY;
+        if (bx < -60 || bx > w + 60) return;
+
+        ctx.fillStyle = blk.hit ? '#9CA3AF' : '#EAB308';
+        ctx.fillRect(bx, by, blk.w, blk.h);
+        ctx.strokeStyle = '#854D0E';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(bx, by, blk.w, blk.h);
+        ctx.fillStyle = blk.hit ? '#4B5563' : '#713F12';
+        ctx.font = '900 20px Fredoka, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(blk.hit ? '•' : '?', bx + blk.w / 2, by + blk.h / 2 + 7);
+      });
+
+      // D. Floating Coins
+      stateRef.current.floatingCoins.forEach(coin => {
+        if (coin.collected) return;
+        const cx = coin.x - camX;
+        const cy = groundY - 80 - Math.sin(Date.now() / 250 + coin.floatOffset) * 8;
+        if (cx < -40 || cx > w + 40) return;
+
+        ctx.fillStyle = '#FACC15';
+        ctx.strokeStyle = '#CA8A04';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        // Spinning width effect
+        const spinWidth = Math.abs(Math.sin(Date.now() / 200 + coin.floatOffset)) * 10 + 2;
+        ctx.ellipse(cx, cy, spinWidth, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+
+      // E. Walking Critters (Goombas)
+      stateRef.current.critters.forEach(cr => {
+        const cx = cr.x - camX;
+        const cy = groundY - cr.h;
+        if (cx < -60 || cx > w + 60) return;
+
+        if (cr.squished) {
+          // Squished pancake critter
+          ctx.fillStyle = '#78350F';
+          ctx.fillRect(cx, groundY - 8, cr.w, 8);
+        } else {
+          // Mushroom cap
+          ctx.fillStyle = '#B45309';
+          ctx.beginPath();
+          ctx.arc(cx + cr.w / 2, cy + 12, 16, Math.PI, 0, false);
+          ctx.fill();
+
+          // Body
+          ctx.fillStyle = '#FDE68A';
+          ctx.fillRect(cx + 6, cy + 12, cr.w - 12, 14);
+
+          // Eyes
+          ctx.fillStyle = '#0F172A';
+          ctx.fillRect(cx + 9, cy + 14, 3, 5);
+          ctx.fillRect(cx + cr.w - 12, cy + 14, 3, 5);
+
+          // Feet waddle
+          ctx.fillStyle = '#1E293B';
+          const waddle = Math.sin(Date.now() / 150) * 3;
+          ctx.fillRect(cx + 2, groundY - 4, 10, 4 + waddle);
+          ctx.fillRect(cx + cr.w - 12, groundY - 4, 10, 4 - waddle);
+        }
+      });
+
+      // 6. Draw Obstacle Pillars / Pipes & Question Blocks
       barriers.forEach((b, idx) => {
         const bx = b.x - camX;
         const by = groundY - b.h;
 
-        // Skip if outside viewport
         if (bx < -150 || bx > w + 150) return;
 
         if (b.cleared) {
-          // Cleared barrier: celebratory Mario flag post & golden arch
+          // Cleared barrier: celebratory Mario flag post
           ctx.fillStyle = '#22c55e';
           ctx.fillRect(bx + b.w / 2 - 4, groundY - 140, 8, 140);
-
-          // Golden finial on top of flagpole
           ctx.fillStyle = '#facc15';
           ctx.beginPath();
           ctx.arc(bx + b.w / 2, groundY - 144, 10, 0, Math.PI * 2);
@@ -443,14 +807,12 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
           return;
         }
 
-        // UNCLEARED PILLAR: Solid Mario Pipe or Castle Brick Pillar
-        // Shadow underneath
+        // UNCLEARED PILLAR
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
         ctx.ellipse(bx + b.w / 2, groundY, b.w * 0.55, 6, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Brick Pillar Body
         const pillarGrad = ctx.createLinearGradient(bx, by, bx + b.w, by);
         pillarGrad.addColorStop(0, '#ea580c');
         pillarGrad.addColorStop(0.5, '#fb923c');
@@ -458,7 +820,6 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
         ctx.fillStyle = pillarGrad;
         ctx.fillRect(bx, by, b.w, b.h);
 
-        // Brick mortar lines
         ctx.strokeStyle = '#7c2d12';
         ctx.lineWidth = 2.5;
         ctx.strokeRect(bx, by, b.w, b.h);
@@ -470,7 +831,6 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
           ctx.stroke();
         }
 
-        // Barrier number badge on pillar
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(bx + 4, by + 6, b.w - 8, 22);
         ctx.fillStyle = '#ffffff';
@@ -483,7 +843,6 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
         const qbX = bx + (b.w - qbSize) / 2;
         const qbY = by - qbSize - 10 + Math.sin(Date.now() / 250) * 4;
 
-        // Block outer border & shadow
         ctx.fillStyle = '#eab308';
         ctx.fillRect(qbX, qbY, qbSize, qbSize);
         ctx.fillStyle = '#fef08a';
@@ -493,17 +852,15 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
         ctx.lineWidth = 3;
         ctx.strokeRect(qbX, qbY, qbSize, qbSize);
 
-        // [?] Text
         ctx.fillStyle = '#713f12';
         ctx.font = '900 24px Fredoka, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('?', qbX + qbSize / 2, qbY + qbSize / 2 + 8);
 
-        // ROTATING GOLDEN STAR ⭐ FLOATING ABOVE QUESTION BLOCK
+        // ROTATING GOLDEN STAR ⭐
         const starY = qbY - 32 + Math.sin(Date.now() / 200 + idx) * 6;
         const starX = bx + b.w / 2;
 
-        // Star glow halo
         const glow = ctx.createRadialGradient(starX, starY, 0, starX, starY, 28);
         glow.addColorStop(0, 'rgba(250, 204, 21, 0.9)');
         glow.addColorStop(1, 'rgba(250, 204, 21, 0)');
@@ -512,7 +869,6 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
         ctx.arc(starX, starY, 28, 0, Math.PI * 2);
         ctx.fill();
 
-        // Star 5-point shape
         ctx.fillStyle = '#facc15';
         ctx.strokeStyle = '#ca8a04';
         ctx.lineWidth = 2.5;
@@ -534,13 +890,23 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
         ctx.fill();
         ctx.stroke();
 
-        // Star eyes (Mario star style!)
         ctx.fillStyle = '#1e293b';
         ctx.fillRect(starX - 4, starY - 4, 2.5, 6);
         ctx.fillRect(starX + 1.5, starY - 4, 2.5, 6);
       });
 
-      // 6. Draw Particles
+      // 7. Draw Floating Flying Text (e.g. +10 XP, BOING!, +1 COIN)
+      stateRef.current.floatingTexts.forEach(ft => {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, ft.alpha);
+        ctx.fillStyle = ft.color;
+        ctx.font = '900 16px Fredoka, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(ft.text, ft.x - camX, ft.y);
+        ctx.restore();
+      });
+
+      // 8. Draw Particles
       stateRef.current.particles.forEach(pt => {
         ctx.save();
         ctx.globalAlpha = Math.max(0, pt.alpha);
@@ -551,7 +917,7 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
         ctx.restore();
       });
 
-      // 7. Draw Player Character & Equipped Vehicle
+      // 9. Draw Player Character & Equipped Vehicle
       const px = p.x - camX;
       const py = p.y;
 
@@ -560,6 +926,12 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       ctx.scale(p.facing, 1);
       if (p.rotation !== 0) {
         ctx.rotate(p.rotation);
+      }
+
+      // Boost speed trails
+      if (p.boostTimer > 0) {
+        ctx.fillStyle = 'rgba(6, 182, 212, 0.4)';
+        ctx.fillRect(-24, -p.h / 2, 14, p.h);
       }
 
       // Ground shadow
@@ -577,17 +949,15 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
         ctx.fillText(vehicle.icon, 0, p.h / 2 + 10);
       }
 
-      // Character Overalls (Legs & Torso)
+      // Overalls (Legs & Torso)
       ctx.fillStyle = character.overallsColor;
-      // Leg run swing
       const legSwing = Math.sin(p.animFrame * 1.5) * 8;
       ctx.fillRect(-12, 10, 8, 14 + (p.onGround ? legSwing : 0));
       ctx.fillRect(4, 10, 8, 14 - (p.onGround ? legSwing : 0));
 
-      // Overalls body
       ctx.fillRect(-12, -4, 24, 16);
 
-      // Overalls yellow straps/buttons
+      // Yellow straps/buttons
       ctx.fillStyle = '#facc15';
       ctx.beginPath();
       ctx.arc(-6, 0, 2.5, 0, Math.PI * 2);
@@ -599,7 +969,7 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       ctx.fillRect(-10, -10, 20, 8);
 
       // Head
-      ctx.fillStyle = '#fed7aa'; // Peach skin
+      ctx.fillStyle = '#fed7aa';
       ctx.beginPath();
       ctx.arc(0, -18, 12, 0, Math.PI * 2);
       ctx.fill();
@@ -614,12 +984,11 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       ctx.arc(4, -20, 2.5, 0, Math.PI * 2);
       ctx.fill();
 
-      // Cap / Hat (Mario Red / Luigi Green)
+      // Cap / Hat
       ctx.fillStyle = character.hatColor;
       ctx.beginPath();
       ctx.ellipse(0, -25, 14, 6, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Cap visor
       ctx.fillRect(0, -24, 15, 4);
 
       // Cap Emblem badge
@@ -644,7 +1013,7 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [character, vehicle, barriers, isPaused]);
+  }, [character, vehicle, barriers, isPaused, subjectCode]);
 
   // Touch control handlers
   const handleTouchLeft = (pressed: boolean) => {
@@ -668,7 +1037,6 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
 
       {/* On-Screen Touch Controls (Mobile Friendly) */}
       <div className="fixed bottom-4 left-4 right-4 z-20 flex justify-between pointer-events-none">
-        {/* Left / Right D-Pad */}
         <div className="flex gap-3 pointer-events-auto">
           <button
             type="button"
@@ -692,7 +1060,6 @@ export const MarioCanvas: React.FC<MarioCanvasProps> = ({
           </button>
         </div>
 
-        {/* Jump Button */}
         <div className="pointer-events-auto">
           <button
             type="button"

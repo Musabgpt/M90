@@ -15,6 +15,7 @@ import { MapModal } from './components/MapModal';
 import { GarageModal } from './components/GarageModal';
 import { SubjectSelectScreen } from './components/SubjectSelectScreen';
 import { UnitClearModal } from './components/UnitClearModal';
+import { TrophyRoomModal } from './components/TrophyRoomModal';
 import { soundManager } from './utils/audio';
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
   const [showSubjectSelect, setShowSubjectSelect] = useState<boolean>(false);
   const [showMapModal, setShowMapModal] = useState<boolean>(false);
   const [showGarageModal, setShowGarageModal] = useState<boolean>(false);
+  const [showTrophyModal, setShowTrophyModal] = useState<boolean>(false);
   const [activeBarrier, setActiveBarrier] = useState<Barrier | null>(null);
   const [clearedUnitReward, setClearedUnitReward] = useState<{ unit: Unit; vehicleId?: string } | null>(null);
 
@@ -155,7 +157,9 @@ export default function App() {
           lessonsCompleted: newLessonsCompleted,
           unitsCompleted: newUnitsCompleted,
           questionsAnswered: prev.progress.questionsAnswered + 1,
-          correctAnswers: prev.progress.correctAnswers + 1
+          correctAnswers: prev.progress.correctAnswers + 1,
+          streak: prev.progress.streak + 1,
+          highScore: Math.max(prev.progress.highScore, prev.progress.streak + 1)
         }
       };
     });
@@ -239,9 +243,30 @@ export default function App() {
       <MarioCanvas
         characterId={gameState.profile.character}
         vehicleId={gameState.profile.equippedVehicle}
+        subjectCode={gameState.profile.currentSubject}
+        streak={gameState.progress.streak}
         barriers={barriers}
         onEncounterBarrier={handleEncounterBarrier}
-        isPaused={!!activeBarrier || showMapModal || showGarageModal || showSubjectSelect || !!clearedUnitReward}
+        onCollectCoin={() => {
+          setGameState(prev => ({
+            ...prev,
+            profile: { ...prev.profile, coins: prev.profile.coins + 1 }
+          }));
+        }}
+        onStompCritter={() => {
+          setGameState(prev => {
+            const newXp = prev.profile.xp + 10;
+            return {
+              ...prev,
+              profile: {
+                ...prev.profile,
+                xp: newXp,
+                level: Math.floor(newXp / 100) + 1
+              }
+            };
+          });
+        }}
+        isPaused={!!activeBarrier || showMapModal || showGarageModal || showSubjectSelect || showTrophyModal || !!clearedUnitReward}
         activeJumpTriggerRef={activeJumpTriggerRef}
       />
 
@@ -264,6 +289,10 @@ export default function App() {
         onOpenSubjects={() => {
           soundManager.playPop();
           setShowSubjectSelect(true);
+        }}
+        onOpenTrophyRoom={() => {
+          soundManager.playPop();
+          setShowTrophyModal(true);
         }}
         onToggleSound={() => {
           setGameState(prev => ({
@@ -334,6 +363,21 @@ export default function App() {
             }));
           }}
           onClose={() => setShowGarageModal(false)}
+        />
+      )}
+
+      {/* Trophy Room & Achievements Modal */}
+      {showTrophyModal && (
+        <TrophyRoomModal
+          profile={gameState.profile}
+          progress={gameState.progress}
+          onBonusCoinsEarned={(earned: number) => {
+            setGameState(prev => ({
+              ...prev,
+              profile: { ...prev.profile, coins: prev.profile.coins + earned }
+            }));
+          }}
+          onClose={() => setShowTrophyModal(false)}
         />
       )}
 
